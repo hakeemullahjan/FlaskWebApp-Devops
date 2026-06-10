@@ -2,6 +2,7 @@
 import pytest
 from datetime import datetime
 from FlaskWebProject1 import app
+import FlaskWebProject1.views as views
 
 @pytest.fixture
 def client():
@@ -36,3 +37,13 @@ def test_nonexistent_route(client):
     """Test a nonexistent route."""
     response = client.get('/nonexistent')
     assert response.status_code == 404
+
+
+def test_timestamp_route(client, monkeypatch):
+    """Test the timestamp route using a mocked MySQL timestamp."""
+    monkeypatch.setattr(views, 'get_mysql_server_timestamp', lambda: '2026-06-01 13:22:00')
+    response = client.get('/timestamp')
+    assert response.status_code == 200
+    assert b'Timestamp' in response.data
+    assert b'new response' in response.data
+    assert b'2026-06-01 13:22:00' in response.data

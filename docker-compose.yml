@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql-custom
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: pass123
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app_network
+
+  flask:
+    build: .
+    container_name: flask-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      FLASK_APP: runserver.py
+      FLASK_RUN_HOST: 0.0.0.0
+      FLASK_RUN_PORT: 8000
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - mysql
+    networks:
+      - app_network
+    command: python runserver.py
+
+volumes:
+  mysql_data:
+
+networks:
+  app_network:
+    driver: bridge

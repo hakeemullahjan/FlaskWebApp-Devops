@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+
+{% block content %}
+
+<h2>{{ title }}.</h2>
+<h3>{{ message }}</h3>
+
+{% if server_timestamp %}
+<p>MySQL server timestamp: {{ server_timestamp }}</p>
+{% else %}
+<p>MySQL server timestamp is unavailable.</p>
+{% endif %}
+
+{% endblock %}
