@@ -70,12 +70,48 @@ jobs:
               cd "$APP_DIR"
             fi
 
+            if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+              echo "Docker Compose not found. Attempting installation..."
+
+              if command -v sudo >/dev/null 2>&1; then
+                SUDO="sudo"
+              else
+                SUDO=""
+              fi
+
+              if command -v apt-get >/dev/null 2>&1; then
+                $SUDO apt-get update -y
+                $SUDO apt-get install -y docker-compose-plugin || $SUDO apt-get install -y docker-compose || true
+                $SUDO apt-get install -y curl wget || true
+              fi
+
+              if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+                ARCH="$(uname -m)"
+                case "$ARCH" in
+                  x86_64) COMPOSE_ARCH="x86_64" ;;
+                  aarch64|arm64) COMPOSE_ARCH="aarch64" ;;
+                  *) echo "Unsupported architecture for Docker Compose binary install: $ARCH"; exit 1 ;;
+                esac
+
+                mkdir -p "$HOME/.docker/cli-plugins"
+                if command -v curl >/dev/null 2>&1; then
+                  curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-${COMPOSE_ARCH}" -o "$HOME/.docker/cli-plugins/docker-compose"
+                elif command -v wget >/dev/null 2>&1; then
+                  wget -q "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-${COMPOSE_ARCH}" -O "$HOME/.docker/cli-plugins/docker-compose"
+                else
+                  echo "Neither curl nor wget is available to download Docker Compose."
+                  exit 1
+                fi
+                chmod +x "$HOME/.docker/cli-plugins/docker-compose"
+              fi
+            fi
+
             if docker compose version >/dev/null 2>&1; then
               COMPOSE_CMD="docker compose"
             elif command -v docker-compose >/dev/null 2>&1; then
               COMPOSE_CMD="docker-compose"
             else
-              echo "Neither 'docker compose' nor 'docker-compose' is available on the VM."
+              echo "Docker Compose installation failed."
               exit 1
             fi
 
