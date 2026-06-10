@@ -75,6 +75,15 @@ jobs:
               cd "$APP_DIR"
             fi
 
+            if docker info >/dev/null 2>&1; then
+              DOCKER_CMD="docker"
+            elif command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
+              DOCKER_CMD="sudo docker"
+            else
+              echo "Docker daemon is not accessible for user '$USER'. Grant docker group access or passwordless sudo for docker."
+              exit 1
+            fi
+
             if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
               echo "Docker Compose not found. Attempting installation..."
 
@@ -111,10 +120,14 @@ jobs:
               fi
             fi
 
-            if docker compose version >/dev/null 2>&1; then
-              COMPOSE_CMD="docker compose"
+            if $DOCKER_CMD compose version >/dev/null 2>&1; then
+              COMPOSE_CMD="$DOCKER_CMD compose"
             elif command -v docker-compose >/dev/null 2>&1; then
-              COMPOSE_CMD="docker-compose"
+              if [ "$DOCKER_CMD" = "sudo docker" ]; then
+                COMPOSE_CMD="sudo docker-compose"
+              else
+                COMPOSE_CMD="docker-compose"
+              fi
             else
               echo "Docker Compose installation failed."
               exit 1
