@@ -56,30 +56,24 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
           GITHUB_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: DOCKER_USERNAME,GITHUB_REPOSITORY,GITHUB_SHA
+          envs: DOCKER_USERNAME,DOCKER_PASSWORD,GITHUB_SHA
           script: |
             set -e
 
-            APP_DIR="$HOME/FlaskWebApp-Devops"
-
-            if [ -d "$APP_DIR/.git" ]; then
-              cd "$APP_DIR"
-              git pull origin main
-            else
-              git clone "https://github.com/$GITHUB_REPOSITORY.git" "$APP_DIR"
-              cd "$APP_DIR"
-            fi
+            DEPLOY_DIR="$HOME/flaskwebapp-deploy"
+            mkdir -p "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
 
             if docker info >/dev/null 2>&1; then
               DOCKER_CMD="docker"
             elif command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
-              DOCKER_CMD="sudo --preserve-env=DOCKER_USERNAME docker"
+              DOCKER_CMD="sudo --preserve-env=DOCKER_USERNAME,DOCKER_PASSWORD docker"
             else
               echo "Docker daemon is not accessible for user '$USER'. Grant docker group access or passwordless sudo for docker."
               exit 1
@@ -90,18 +84,65 @@ jobs:
               exit 1
             fi
 
+            if [ -z "$DOCKER_PASSWORD" ]; then
+              echo "DOCKER_PASSWORD is empty on the VM session. Check GitHub secret DOCKER_PASSWORD and appleboy envs forwarding."
+              exit 1
+            fi
+
             if [ -z "$GITHUB_SHA" ]; then
               echo "GITHUB_SHA is empty on the VM session. Check appleboy env forwarding."
               exit 1
             fi
 
-            # Ensure compose resolves image name and the exact tag built in this run.
+            # Ensure compose resolves image name and exact image tag built in this workflow run.
             cat > .env <<EOF
             DOCKER_USERNAME=$DOCKER_USERNAME
             IMAGE_TAG=$GITHUB_SHA
             EOF
 
-            if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+            cat > docker-compose.yml <<'EOF'
+            version: "3.9"
+
+            services:
+              mysql:
+                image: mysql:latest
+                container_name: mysql-custom
+                restart: unless-stopped
+                environment:
+                  MYSQL_ROOT_PASSWORD: pass123
+                ports:
+                  - "3308:3306"
+                volumes:
+                  - mysql_data:/var/lib/mysql
+                networks:
+                  - app_network
+
+              flask:
+                image: ${DOCKER_USERNAME}/my-app:${IMAGE_TAG:-latest}
+                container_name: flask-app
+                restart: unless-stopped
+                ports:
+                  - "8000:8000"
+                environment:
+                  FLASK_APP: runserver.py
+                  FLASK_RUN_HOST: 0.0.0.0
+                  FLASK_RUN_PORT: 8000
+                  PYTHONUNBUFFERED: "1"
+                depends_on:
+                  - mysql
+                networks:
+                  - app_network
+                command: python runserver.py
+
+            volumes:
+              mysql_data:
+
+            networks:
+              app_network:
+                driver: bridge
+            EOF
+
+            if ! $DOCKER_CMD compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
               echo "Docker Compose not found. Attempting installation..."
 
               if command -v sudo >/dev/null 2>&1; then
@@ -116,7 +157,7 @@ jobs:
                 $SUDO apt-get install -y curl wget || true
               fi
 
-              if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+              if ! $DOCKER_CMD compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
                 ARCH="$(uname -m)"
                 case "$ARCH" in
                   x86_64) COMPOSE_ARCH="x86_64" ;;
@@ -140,8 +181,8 @@ jobs:
             if $DOCKER_CMD compose version >/dev/null 2>&1; then
               COMPOSE_CMD="$DOCKER_CMD compose"
             elif command -v docker-compose >/dev/null 2>&1; then
-              if [ "$DOCKER_CMD" = "sudo --preserve-env=DOCKER_USERNAME docker" ]; then
-                COMPOSE_CMD="sudo --preserve-env=DOCKER_USERNAME docker-compose"
+              if [ "$DOCKER_CMD" = "sudo --preserve-env=DOCKER_USERNAME,DOCKER_PASSWORD docker" ]; then
+                COMPOSE_CMD="sudo --preserve-env=DOCKER_USERNAME,DOCKER_PASSWORD docker-compose"
               else
                 COMPOSE_CMD="docker-compose"
               fi
@@ -149,6 +190,8 @@ jobs:
               echo "Docker Compose installation failed."
               exit 1
             fi
+
+            echo "$DOCKER_PASSWORD" | $DOCKER_CMD login -u "$DOCKER_USERNAME" --password-stdin
 
             cleanup_port_8000_containers() {
               PORT_CONTAINERS="$($DOCKER_CMD ps --filter publish=8000 --format '{{.ID}} {{.Names}}')"
