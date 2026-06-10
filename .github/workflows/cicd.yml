@@ -43,7 +43,7 @@ jobs:
  
            
             
-            cd ~/app2
+            cd ~/app
  
            
             sudo sed -i "s|image: hakeemullahjan/myapp:.*|image: hakeemullahjan/myapp:${{ github.sha }}|" docker-compose.yml
