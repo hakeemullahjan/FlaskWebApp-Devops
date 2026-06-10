@@ -57,11 +57,12 @@ jobs:
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: DOCKER_USERNAME,GITHUB_REPOSITORY
+          envs: DOCKER_USERNAME,GITHUB_REPOSITORY,GITHUB_SHA
           script: |
             set -e
 
@@ -88,6 +89,17 @@ jobs:
               echo "DOCKER_USERNAME is empty on the VM session. Check GitHub secret DOCKER_USERNAME and appleboy envs forwarding."
               exit 1
             fi
+
+            if [ -z "$GITHUB_SHA" ]; then
+              echo "GITHUB_SHA is empty on the VM session. Check appleboy env forwarding."
+              exit 1
+            fi
+
+            # Ensure compose resolves image name and the exact tag built in this run.
+            cat > .env <<EOF
+            DOCKER_USERNAME=$DOCKER_USERNAME
+            IMAGE_TAG=$GITHUB_SHA
+            EOF
 
             if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
               echo "Docker Compose not found. Attempting installation..."
@@ -138,5 +150,37 @@ jobs:
               exit 1
             fi
 
+            cleanup_port_8000_containers() {
+              PORT_CONTAINERS="$($DOCKER_CMD ps --filter publish=8000 --format '{{.ID}} {{.Names}}')"
+              if [ -n "$PORT_CONTAINERS" ]; then
+                echo "Port 8000 is currently in use. Cleaning conflicting containers..."
+                while read -r CONTAINER_ID CONTAINER_NAME; do
+                  if [ -n "$CONTAINER_ID" ]; then
+                    $DOCKER_CMD stop "$CONTAINER_ID" || true
+                    $DOCKER_CMD rm "$CONTAINER_ID" || true
+                    echo "Removed container $CONTAINER_NAME ($CONTAINER_ID)"
+                  fi
+                done <<< "$PORT_CONTAINERS"
+              fi
+            }
+
+            # Pre-clean stale containers that may block app port.
+            cleanup_port_8000_containers
+
             $COMPOSE_CMD pull
-            $COMPOSE_CMD up -d
+
+            set +e
+            UP_OUTPUT="$($COMPOSE_CMD up -d --remove-orphans --force-recreate 2>&1)"
+            UP_EXIT=$?
+            set -e
+
+            if [ $UP_EXIT -ne 0 ]; then
+              echo "$UP_OUTPUT"
+              if echo "$UP_OUTPUT" | grep -Eq "port is already allocated|Bind for 0.0.0.0:8000 failed"; then
+                echo "Port conflict detected after compose up. Retrying after cleanup..."
+                cleanup_port_8000_containers
+                $COMPOSE_CMD up -d --remove-orphans --force-recreate
+              else
+                exit $UP_EXIT
+              fi
+            fi
