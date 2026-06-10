@@ -1,106 +1,55 @@
-name: Build and Deploy Python Application
-
+name: CI/CD Pipeline
+ 
 on:
   push:
     branches:
       - main
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      commit_hash: ${{ steps.vars.outputs.commit_hash }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Echo a message
-        run: |
-          echo "Hakeem Ullah"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -m pip install flake8
-
-      - name: Lint with flake8
-        run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
-      - name: Docker Login
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Commit Hash
-        id: vars
+ 
+      - name: Build and tag image
         run: |
-          COMMIT_HASH=$(echo "${{ github.sha }}" | cut -c 1-7)
-          echo "Commit Hash: $COMMIT_HASH"
-          echo "commit_hash=$COMMIT_HASH" >> "$GITHUB_OUTPUT"
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/my-app:${{ steps.vars.outputs.commit_hash }}
-            ${{ secrets.DOCKER_USERNAME }}/my-app:latest
-
+          docker build -t hakeemullahjan/myapp:latest -t hakeemullahjan/myapp:${{ github.sha }} .
+ 
+      - name: Push image
+        run: |
+          docker push hakeemullahjan/myapp:latest
+          docker push hakeemullahjan/myapp:${{ github.sha }}
+ 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
-      - name: SSH into VM and Deploy
+      - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-          COMMIT_HASH: ${{ needs.build.outputs.commit_hash }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: DOCKER_USERNAME,DOCKER_PASSWORD,COMMIT_HASH
           script: |
-            set -e
-
-            DEPLOY_DIR="$HOME/FlaskWebApp-Devops"
-            cd "$DEPLOY_DIR"
-
-            if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_PASSWORD" ] || [ -z "$COMMIT_HASH" ]; then
-              echo "Missing DOCKER_USERNAME, DOCKER_PASSWORD, or COMMIT_HASH in VM session."
-              exit 1
-            fi
-
-            if [ ! -f ".env" ]; then
-              printf 'DOCKER_USERNAME=%s\nIMAGE_TAG=%s\n' "$DOCKER_USERNAME" "$COMMIT_HASH" > .env
-            else
-              if grep -q '^DOCKER_USERNAME=' .env; then
-                sed -i "s/^DOCKER_USERNAME=.*/DOCKER_USERNAME=$DOCKER_USERNAME/" .env
-              else
-                echo "DOCKER_USERNAME=$DOCKER_USERNAME" >> .env
-              fi
-
-              if grep -q '^IMAGE_TAG=' .env; then
-                sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$COMMIT_HASH/" .env
-              else
-                echo "IMAGE_TAG=$COMMIT_HASH" >> .env
-              fi
-            fi
-
-            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-
-            echo "Updating image tag to $COMMIT_HASH"
-            docker compose pull
-            docker compose up -d
+           
+            echo "${{ secrets.DOCKER_PASSWORD }}" | sudo docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+ 
+           
+            
+            cd ~/app2
+ 
+           
+            sudo sed -i "s|image: hakeemullahjan/myapp:.*|image: hakeemullahjan/myapp:${{ github.sha }}|" docker-compose.yml
+ 
+           
+            sudo docker compose pull
+ 
+           
+            sudo docker compose up -d
