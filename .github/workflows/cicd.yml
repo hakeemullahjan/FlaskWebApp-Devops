@@ -75,7 +75,7 @@ jobs:
           script: |
             set -e
 
-            DEPLOY_DIR="$HOME/flaskwebapp-deploy"
+            DEPLOY_DIR="$HOME/FlaskWebApp-Devops"
             cd "$DEPLOY_DIR"
 
             if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_PASSWORD" ] || [ -z "$COMMIT_HASH" ]; then
