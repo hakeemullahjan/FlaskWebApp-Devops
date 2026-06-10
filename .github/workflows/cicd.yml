@@ -94,53 +94,26 @@ jobs:
               exit 1
             fi
 
-            # Ensure compose resolves image name and exact image tag built in this workflow run.
-            cat > .env <<EOF
-            DOCKER_USERNAME=$DOCKER_USERNAME
-            IMAGE_TAG=$GITHUB_SHA
-            EOF
+            if [ ! -f "docker-compose.yml" ]; then
+              echo "docker-compose.yml not found in $DEPLOY_DIR."
+              exit 1
+            fi
 
-            cat > docker-compose.yml <<'EOF'
-            version: "3.9"
+            if [ -f ".env" ]; then
+              if grep -q '^DOCKER_USERNAME=' .env; then
+                sed -i "s/^DOCKER_USERNAME=.*/DOCKER_USERNAME=$DOCKER_USERNAME/" .env
+              else
+                echo "DOCKER_USERNAME=$DOCKER_USERNAME" >> .env
+              fi
 
-            services:
-              mysql:
-                image: mysql:latest
-                container_name: mysql-custom
-                restart: unless-stopped
-                environment:
-                  MYSQL_ROOT_PASSWORD: pass123
-                ports:
-                  - "3308:3306"
-                volumes:
-                  - mysql_data:/var/lib/mysql
-                networks:
-                  - app_network
-
-              flask:
-                image: ${DOCKER_USERNAME}/my-app:${IMAGE_TAG:-latest}
-                container_name: flask-app
-                restart: unless-stopped
-                ports:
-                  - "8000:8000"
-                environment:
-                  FLASK_APP: runserver.py
-                  FLASK_RUN_HOST: 0.0.0.0
-                  FLASK_RUN_PORT: 8000
-                  PYTHONUNBUFFERED: "1"
-                depends_on:
-                  - mysql
-                networks:
-                  - app_network
-                command: python runserver.py
-
-            volumes:
-              mysql_data:
-
-            networks:
-              app_network:
-                driver: bridge
-            EOF
+              if grep -q '^IMAGE_TAG=' .env; then
+                sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$GITHUB_SHA/" .env
+              else
+                echo "IMAGE_TAG=$GITHUB_SHA" >> .env
+              fi
+            else
+              printf 'DOCKER_USERNAME=%s\nIMAGE_TAG=%s\n' "$DOCKER_USERNAME" "$GITHUB_SHA" > .env
+            fi
 
             if ! $DOCKER_CMD compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
               echo "Docker Compose not found. Attempting installation..."
