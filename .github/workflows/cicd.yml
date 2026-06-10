@@ -78,9 +78,14 @@ jobs:
             if docker info >/dev/null 2>&1; then
               DOCKER_CMD="docker"
             elif command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
-              DOCKER_CMD="sudo docker"
+              DOCKER_CMD="sudo --preserve-env=DOCKER_USERNAME docker"
             else
               echo "Docker daemon is not accessible for user '$USER'. Grant docker group access or passwordless sudo for docker."
+              exit 1
+            fi
+
+            if [ -z "$DOCKER_USERNAME" ]; then
+              echo "DOCKER_USERNAME is empty on the VM session. Check GitHub secret DOCKER_USERNAME and appleboy envs forwarding."
               exit 1
             fi
 
@@ -123,8 +128,8 @@ jobs:
             if $DOCKER_CMD compose version >/dev/null 2>&1; then
               COMPOSE_CMD="$DOCKER_CMD compose"
             elif command -v docker-compose >/dev/null 2>&1; then
-              if [ "$DOCKER_CMD" = "sudo docker" ]; then
-                COMPOSE_CMD="sudo docker-compose"
+              if [ "$DOCKER_CMD" = "sudo --preserve-env=DOCKER_USERNAME docker" ]; then
+                COMPOSE_CMD="sudo --preserve-env=DOCKER_USERNAME docker-compose"
               else
                 COMPOSE_CMD="docker-compose"
               fi
