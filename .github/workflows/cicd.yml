@@ -100,19 +100,13 @@ jobs:
             fi
 
             if [ -f ".env" ]; then
-              if grep -q '^DOCKER_USERNAME=' .env; then
-                sed -i "s/^DOCKER_USERNAME=.*/DOCKER_USERNAME=$DOCKER_USERNAME/" .env
-              else
-                echo "DOCKER_USERNAME=$DOCKER_USERNAME" >> .env
-              fi
-
               if grep -q '^IMAGE_TAG=' .env; then
                 sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$GITHUB_SHA/" .env
               else
                 echo "IMAGE_TAG=$GITHUB_SHA" >> .env
               fi
             else
-              printf 'DOCKER_USERNAME=%s\nIMAGE_TAG=%s\n' "$DOCKER_USERNAME" "$GITHUB_SHA" > .env
+              printf 'IMAGE_TAG=%s\n' "$GITHUB_SHA" > .env
             fi
 
             if ! $DOCKER_CMD compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
@@ -163,8 +157,6 @@ jobs:
               echo "Docker Compose installation failed."
               exit 1
             fi
-
-            echo "$DOCKER_PASSWORD" | $DOCKER_CMD login -u "$DOCKER_USERNAME" --password-stdin
 
             cleanup_port_8000_containers() {
               PORT_CONTAINERS="$($DOCKER_CMD ps --filter publish=8000 --format '{{.ID}} {{.Names}}')"
