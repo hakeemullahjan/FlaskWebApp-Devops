@@ -25,6 +25,12 @@ def test_home_route_alias(client):
     assert b'Home Page' in response.data  # Check if the title exists
     assert str(datetime.now().year).encode() in response.data  # Check the year
 
+def test_version_route(client):
+    """Test the /version route."""
+    response = client.get('/version')
+    assert response.status_code == 200
+    assert response.get_json() == {'version': '1.0'}
+
 def test_contact_route(client):
     """Test the contact route."""
     response = client.get('/contact')

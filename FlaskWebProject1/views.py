@@ -4,7 +4,7 @@ Routes and views for the flask application.
 
 import os
 from datetime import datetime
-from flask import render_template
+from flask import jsonify, render_template
 import mysql.connector
 from FlaskWebProject1 import app
 
@@ -43,6 +43,12 @@ def home():
         title='Home Page - DOcker comopose class',
         year=datetime.now().year,
     )
+
+
+@app.route('/version')
+def version():
+    """Returns the application version."""
+    return jsonify(version='1.0')
 
 
 @app.route('/contact')

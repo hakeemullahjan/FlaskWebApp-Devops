@@ -15,7 +15,7 @@ services:
       - app_network
 
   flask:
-    build: .
+    image: ${DOCKERHUB_USERNAME}/my-app:latest
     container_name: flask-app
     restart: unless-stopped
     ports:
