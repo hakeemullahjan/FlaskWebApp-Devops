@@ -20,12 +20,12 @@ jobs:
  
       - name: Build and tag image
         run: |
-          docker build -t hakeemullahjan/myapp:latest -t hakeemullahjan/myapp:${{ github.sha }} .
+          docker build -t hakeemullahjan/my-app:latest -t hakeemullahjan/my-app:${{ github.sha }} .
  
       - name: Push image
         run: |
-          docker push hakeemullahjan/myapp:latest
-          docker push hakeemullahjan/myapp:${{ github.sha }}
+          docker push hakeemullahjan/my-app:latest
+          docker push hakeemullahjan/my-app:${{ github.sha }}
  
   deploy:
     needs: build
@@ -46,7 +46,7 @@ jobs:
             cd ~/app
  
            
-            sudo sed -i "s|image: hakeemullahjan/myapp:.*|image: hakeemullahjan/myapp:${{ github.sha }}|" docker-compose.yml
+            sudo sed -i "s|image: hakeemullahjan/my-app:.*|image: hakeemullahjan/my-app:${{ github.sha }}|" docker-compose.yml
  
            
             sudo docker compose pull
