@@ -48,7 +48,7 @@ def home():
 @app.route('/version')
 def version():
     """Returns the application version."""
-    return jsonify(version='6.0')
+    return jsonify(version='9.0')
 
 
 @app.route('/contact')
